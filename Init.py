@@ -3,57 +3,59 @@
 
 from discord.ext import commands as DiscCommands
 from discord import Intents
-import pomice as Pomice
+from configparser import ConfigParser
 import sqlite3 as Mysql
 
-Db = Mysql.connect('Database.db')
-Cursor = Db.cursor()
+class Init(DiscCommands.Bot):
 
-Cursor.execute('''
-CREATE TABLE IF NOT EXISTS General_Preferences(
-Server_Identifier INTEGER PRIMARY KEY,
-Prefix TEXT,
-Language TEXT
-)
-''')
-Db.commit()
+    def __init__(Self):
 
-def getPrefix(Bot, Context : DiscCommands.Context):
+        Self.Intetns = Intents.all()
 
-    intIdentifier = Context.guild.id
+        Self.Db = Mysql.connect('Database.db')
 
-    getIdentifierCursor = Cursor.execute('SELECT Prefix FROM General_Preferences WHERE Server_Identifier = ?', (intIdentifier,) )
-    varIdentifierResult = getIdentifierCursor.fetchone()
-    
-    if varIdentifierResult is None:
+        Self.Cursor = Self.Db.cursor()
 
-        Cursor.execute('INSERT INTO General_Preferences (Server_Identifier, Prefix, Language) VALUES (?, ?, ?)', (intIdentifier, '!', 'English') )
-        Db.commit()
+        # Create table if not exists.
 
-        varIdentifierResult = '!'
-
-    else: varIdentifierResult = varIdentifierResult[0]
-
-    return varIdentifierResult
+        Self.Cursor.execute(f'''
         
-Bot = DiscCommands.Bot(command_prefix = ".", intents = Intents.all())
+        CREATE TABLE IF NOT EXISTS Users (
+            User_Identifier Int,
+            Server_Identifier Int,
+            Prefix Char(1) Default {Ini['Init']['DefaultPrefix']},
+            Language Varchar(12) Default {Ini['Init']['DefaultLangauge']},
+            Primary Key (User_Identifier)
+        )
 
-async def ConnectNode():
+        ''')
+        Self.Db.commit()
 
-    await Bot.wait_until_ready()
+        super().__init__(command_prefix = Self.RequestPrefix, intents = Self.Intetns)
 
-    await Pomice.NodePool.create_node(bot = Bot, host = '', port = , password = '', identifier = 'Main', secure = False, 
-                                      spotify_client_id="", 
-                                      spotify_client_secret="",
-                                      apple_music=)
+    def RequestPrefix(Self, Bot, Context : DiscCommands.Context):
 
-@Bot.event
+        Author, Server = Context.author.id, Context.guild.id
 
-async def on_ready():
+        varPrefix = Self.Cursor.execute('SELECT Prefix FROM Users WHERE User_Identifier = ? AND Server_Identifier = ?', (Author, Server) ).fetchone()
 
-    await Bot.load_extension(f'MusicPlayer')
+        if varPrefix is None:
 
-    Bot.loop.create_task(ConnectNode())
+            Self.Cursor.execute('INSERT INTO Users (User_Identifier, Server_Identifier) VALUES (?, ?)', (Author, Server) )
+            Self.Db.commit()
 
-Bot.run('')
+            varPrefix = Ini['Init']['DefaultPrefix']
 
+        else: varPrefix = varPrefix[0]
+
+        return varPrefix
+    
+    async def on_ready():
+
+        await super().load_extension(f'Music Player')
+
+Ini = ConfigParser()
+Ini.read(f'Configuration.ini')
+
+Bot = Init()
+Bot.run(Ini['Init']['Token'])
